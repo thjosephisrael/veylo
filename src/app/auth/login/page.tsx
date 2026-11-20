@@ -4,80 +4,109 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VeyloLogo } from "@/components/brand/VeyloLogo";
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { useAccount } from "@/context/AccountContext";
 import {
-  ShieldCheck,
-  ArrowRight,
-  UserCheck,
-  CheckCircle2,
-  Building2,
-  Globe2,
-  Fingerprint,
-  Sparkles,
   ArrowLeft,
-  Lock,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+  Sparkles,
+  User,
+  Store,
+  Globe,
 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { allUsers, currentUser, switchUser, testnetStatus } = useAccount();
+  const { allUsers, switchUser } = useAccount();
 
-  const [activeTab, setActiveTab] = useState<"quick_select" | "manual">("quick_select");
-  const [manualIdentifier, setManualIdentifier] = useState("");
-  const [authenticatingUserId, setAuthenticatingUserId] = useState<string | null>(null);
+  const [identifier, setIdentifier] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
 
-  // Sign in with selected demo account
-  const handleSelectAccount = (userId: string) => {
-    setAuthenticatingUserId(userId);
-    setErrorMsg(null);
-    switchUser(userId);
-
-    setTimeout(() => {
-      router.push("/app");
-    }, 600);
-  };
-
-  // Sign in with manual input (resolve by account number or handle)
-  const handleManualSubmit = (e: React.FormEvent) => {
+  // Authenticate via server session API
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    const cleanInput = manualIdentifier.trim().toLowerCase().replace(/\s+/g, "");
+    const cleanInput = identifier.trim();
     if (!cleanInput) {
-      setErrorMsg("Please enter your 10-digit Veylo Account Number or @handle");
+      setErrorMsg("Please enter your Veylo ID, handle, or email address.");
       return;
     }
 
-    const matchedUser = allUsers.find((u) => {
-      const cleanAcc = u.veyloAccountNumber.replace(/\s+/g, "");
-      const cleanHandle = u.handle.toLowerCase();
-      return cleanAcc === cleanInput || cleanHandle === cleanInput || cleanHandle === `@${cleanInput}`;
-    });
+    setIsLoading(true);
 
-    if (matchedUser) {
-      handleSelectAccount(matchedUser.id);
-    } else {
-      // Default fallback for demo flexibility
-      handleSelectAccount("usr_tomi");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: cleanInput }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(
+          data.error ||
+            "No account found matching this Veylo ID or email. Please check your credentials or explore the demo."
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Switch context to returned user
+      await switchUser(data.user.id);
+      router.push("/app");
+    } catch {
+      setErrorMsg("Unable to connect to authentication server. Please try again.");
+      setIsLoading(false);
+    }
+  };
+
+  // Select demo persona via server session
+  const handleSelectDemo = async (userId: string) => {
+    setIsLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/auth/demo-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || "Failed to initialize demo session.");
+        setIsLoading(false);
+        return;
+      }
+
+      await switchUser(data.user.id);
+      setDemoModalOpen(false);
+      router.push("/app");
+    } catch {
+      setErrorMsg("Failed to start demo session.");
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-between p-4 sm:p-8 font-sans selection:bg-[#3D5BFF] selection:text-white">
-      {/* Top Navigation */}
-      <header className="max-w-4xl mx-auto w-full flex items-center justify-between pb-6 border-b border-slate-200/80">
+      {/* Top Header */}
+      <header className="max-w-4xl mx-auto w-full flex items-center justify-between pb-6 border-b border-slate-200">
         <VeyloLogo variant="light" size="sm" href="/" />
 
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-            <span className="text-[11px] font-mono text-slate-700">
-              ILP Testnet • {testnetStatus.latencyMs}ms
-            </span>
+          <div className="hidden sm:flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1 text-[11px] font-mono text-slate-600 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>Test Environment • Play Money</span>
           </div>
 
           <Link
@@ -90,192 +119,147 @@ export default function LoginPage() {
         </div>
       </header>
 
-      {/* Main Login Workspace */}
-      <main className="max-w-4xl mx-auto w-full my-8">
-        <div className="text-center space-y-2 mb-8">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#3D5BFF]/10 text-xs font-mono font-bold text-[#3D5BFF]">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>CRYPTOGRAPHIC MULTI-ACCOUNT AUTHENTICATION</span>
+      {/* Main Login Card */}
+      <main className="max-w-md mx-auto w-full my-12">
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111B32] font-sans tracking-tight">
+              Sign in to Veylo
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500">
+              One identity. A more connected way to move money.
+            </p>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#111B32] font-sans tracking-tight">
-            Sign In to Veylo
-          </h1>
-          <p className="text-sm text-slate-500 max-w-lg mx-auto">
-            Choose an account to sign in, or enter your 10-digit Veylo Account Number to authenticate via Passkey or Face ID.
-          </p>
+
+          {errorMsg && (
+            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <Input
+              label="Veylo ID, Handle, or Email"
+              type="text"
+              placeholder="e.g. 482 193 7604 or @tomiade"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              helperText="Use your 10-digit Veylo Account Pass or registered handle"
+              required
+            />
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              isLoading={isLoading}
+              rightIcon={<ArrowRight className="w-4 h-4" />}
+            >
+              Sign In
+            </Button>
+          </form>
+
+          {/* Restrained Demo Explore Divider */}
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-3 text-slate-400 font-mono">
+                or
+              </span>
+            </div>
+          </div>
+
+          {/* Understated Explore Demo Action */}
+          <div className="text-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              onClick={() => setDemoModalOpen(true)}
+              className="w-full text-slate-700 hover:text-[#111B32] hover:border-slate-300"
+              leftIcon={<Sparkles className="w-4 h-4 text-[#3D5BFF]" />}
+            >
+              Explore Demo Workspaces
+            </Button>
+            <p className="text-[11px] text-slate-400 pt-2 font-mono">
+              Seeded sample accounts for hackathon review
+            </p>
+          </div>
         </div>
-
-        {/* Tab Controls */}
-        <div className="max-w-md mx-auto flex p-1.5 bg-slate-200/80 rounded-2xl gap-1 mb-8 shadow-inner">
-          <button
-            onClick={() => setActiveTab("quick_select")}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-              activeTab === "quick_select"
-                ? "bg-white text-midnight-950 shadow-sm"
-                : "text-slate-600 hover:text-midnight-950"
-            }`}
-          >
-            <UserCheck className="w-4 h-4 text-[#3D5BFF]" />
-            <span>Demo Accounts (5)</span>
-          </button>
-          <button
-            onClick={() => setActiveTab("manual")}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-              activeTab === "manual"
-                ? "bg-white text-midnight-950 shadow-sm"
-                : "text-slate-600 hover:text-midnight-950"
-            }`}
-          >
-            <Fingerprint className="w-4 h-4 text-[#3D5BFF]" />
-            <span>Manual Sign In</span>
-          </button>
-        </div>
-
-        {/* ========================================================
-            TAB 1: PREMIUM DEMO ACCOUNT SELECTOR (5 Accounts)
-           ======================================================== */}
-        {activeTab === "quick_select" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {allUsers.map((user) => {
-              const isSelected = authenticatingUserId === user.id;
-
-              return (
-                <div
-                  key={user.id}
-                  onClick={() => handleSelectAccount(user.id)}
-                  className={`relative p-5 rounded-2xl border transition-all cursor-pointer text-left bg-white shadow-sm hover:shadow-md active:scale-[0.99] flex flex-col justify-between gap-4 group ${
-                    isSelected
-                      ? "border-[#3D5BFF] ring-2 ring-[#3D5BFF]/30 bg-[#3D5BFF]/5"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={user.avatarUrl}
-                          alt={user.name}
-                          className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-200 group-hover:ring-[#3D5BFF] transition-all"
-                        />
-                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#10B981] rounded-full border-2 border-white" />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-bold text-[#111B32] group-hover:text-[#3D5BFF] transition-colors">
-                            {user.name}
-                          </h3>
-                          <span className="text-[10px] font-mono font-bold uppercase text-[#3D5BFF] bg-[#3D5BFF]/10 px-2 py-0.5 rounded-full">
-                            {user.role}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 font-mono mt-0.5">
-                          {user.handle} • {user.location}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span className="text-xs font-mono font-bold text-[#111B32] bg-[#F1F5F9] px-2.5 py-1 rounded-lg shrink-0">
-                      {user.currency === "NGN"
-                        ? `₦${(user.availableBalanceNgn).toLocaleString("en-NG")}`
-                        : user.currency === "GBP"
-                        ? `£${user.foreignBalance?.amount.toLocaleString("en-GB")}`
-                        : `€${user.foreignBalance?.amount.toLocaleString("de-DE")}`}
-                    </span>
-                  </div>
-
-                  {/* Account Metadata Row */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-1.5 font-mono">
-                      <span className="bg-[#111B32] text-[#D8F15B] px-2 py-0.5 rounded text-[11px] font-bold">
-                        {user.veyloAccountNumber}
-                      </span>
-                      <span className="text-[11px] text-slate-400">({user.connectedBank.bankName})</span>
-                    </div>
-
-                    <button
-                      className={`inline-flex items-center gap-1 text-xs font-bold transition-colors ${
-                        isSelected ? "text-[#3D5BFF]" : "text-slate-600 group-hover:text-[#3D5BFF]"
-                      }`}
-                    >
-                      {isSelected ? (
-                        <>
-                          <span className="animate-spin w-3.5 h-3.5 border-2 border-[#3D5BFF] border-t-transparent rounded-full" />
-                          <span>Signing In...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Sign In</span>
-                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ========================================================
-            TAB 2: MANUAL ACCOUNT NUMBER & PASSKEY FORM
-           ======================================================== */}
-        {activeTab === "manual" && (
-          <div className="max-w-md mx-auto">
-            <Card variant="white" className="p-8 shadow-xl space-y-6">
-              <div className="space-y-1 text-center">
-                <h3 className="text-lg font-bold text-[#111B32]">Manual Credentials</h3>
-                <p className="text-xs text-slate-500">
-                  Enter any 10-digit account number (e.g. 482 193 7604) or verified handle
-                </p>
-              </div>
-
-              <form onSubmit={handleManualSubmit} className="space-y-4">
-                <Input
-                  label="10-Digit Account Number or @handle"
-                  value={manualIdentifier}
-                  onChange={(e) => setManualIdentifier(e.target.value)}
-                  placeholder="e.g. 482 193 7604 or @tomiade"
-                  leftAddon={<UserCheck className="w-4 h-4 text-slate-400" />}
-                  error={errorMsg || undefined}
-                  helperText="Tip: Enter any demo number or handle"
-                />
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  isLoading={authenticatingUserId !== null}
-                  className="w-full justify-center"
-                  rightIcon={<ArrowRight className="w-4 h-4" />}
-                >
-                  Authorize with Passkey / Face ID
-                </Button>
-              </form>
-
-              <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500">
-                Don&apos;t have a Veylo account yet?{" "}
-                <Link href="/auth/register" className="text-[#3D5BFF] font-bold hover:underline">
-                  Claim Account Number
-                </Link>
-              </div>
-            </Card>
-          </div>
-        )}
       </main>
 
-      {/* Footer */}
-      <footer className="max-w-4xl mx-auto w-full pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-2">
-        <p>© 2026 Veylo Inc. Connected to Open Payments Network.</p>
-        <div className="flex items-center gap-4">
-          <Link href="/demo/checkout-architecture" className="hover:text-slate-600 transition-colors">
-            Protocol Security
-          </Link>
-          <Link href="/business" className="hover:text-slate-600 transition-colors">
-            Merchant Portal
-          </Link>
+      {/* Demo Selector Modal */}
+      <Modal
+        isOpen={demoModalOpen}
+        onClose={() => setDemoModalOpen(false)}
+        title="Select Demo Workspace"
+        subtitle="Choose a sample persona to test sender, receiver, and merchant flows"
+      >
+        <div className="space-y-3 p-2">
+          {allUsers.map((user) => {
+            const isSender = user.role === "consumer" && user.id === "usr_tomi";
+            const isMerchant = user.role === "business";
+            const isIntl = user.role === "international";
+
+            return (
+              <button
+                key={user.id}
+                onClick={() => handleSelectDemo(user.id)}
+                className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-slate-200 hover:border-[#3D5BFF] hover:bg-slate-50 transition-all text-left group"
+              >
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:ring-2 group-hover:ring-[#3D5BFF] transition-all"
+                  />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-[#111B32] group-hover:text-[#3D5BFF] transition-colors">
+                        {user.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        {isSender
+                          ? "Primary Sender"
+                          : isMerchant
+                          ? "Merchant"
+                          : isIntl
+                          ? "Cross-Border"
+                          : "Recipient"}
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-slate-500">
+                      {user.veyloAccountNumber} • {user.handle}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-sm font-mono font-bold text-[#111B32]">
+                    {user.currency === "NGN"
+                      ? `₦${user.availableBalanceNgn.toLocaleString("en-NG")}`
+                      : user.currency === "GBP"
+                      ? `£${user.foreignBalance?.amount.toLocaleString("en-GB")}`
+                      : `€${user.foreignBalance?.amount.toLocaleString("de-DE")}`}
+                  </p>
+                  <span className="text-[11px] text-[#3D5BFF] font-medium group-hover:underline">
+                    Select &rarr;
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
+      </Modal>
+
+      {/* Footer */}
+      <footer className="max-w-4xl mx-auto w-full text-center text-xs text-slate-400 py-4 font-mono">
+        <p>Veylo Network • Open Payments / Interledger Hackathon Demo</p>
       </footer>
     </div>
   );

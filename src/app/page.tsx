@@ -84,13 +84,13 @@ export default function MarketingHomePage() {
 
                 {/* Editorial Serif Heading */}
                 <h1 className="text-5xl sm:text-6xl lg:text-[64px] font-normal tracking-tight text-[#111B32] font-serif leading-[1.08]">
-                  Move money. <br />
-                  <span className="italic text-[#3D5BFF]">Keep control.</span>
+                  One identity. <br />
+                  <span className="italic text-[#3D5BFF]">A more connected way to move money.</span>
                 </h1>
 
                 {/* Subtitle */}
                 <p className="text-base sm:text-lg text-[#475569] max-w-xl leading-relaxed font-medium">
-                  Veylo gives every person and merchant a familiar, memorable 10-digit Veylo Account Number. Send across borders, pay in-store, or authorize online subscriptions through Interledger with zero card taxes and zero credential exposure.
+                  Use your Veylo ID to connect with participating Open Payments-enabled wallets and pay through one clear experience. Send cross-border, check out online, and manage recurring payments with zero credential exposure.
                 </p>
 
                 {/* CTA Buttons (Figma 51:29) */}

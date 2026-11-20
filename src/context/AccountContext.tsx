@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import {
   UserProfile,
   Transaction,
@@ -14,28 +14,31 @@ import {
   MOCK_SUBSCRIPTIONS,
   INTERLEDGER_TESTNET_STATUS,
 } from "@/data/mockData";
-import { generateIlpPreparePacket } from "@/lib/interledger";
+
+interface SendPaymentParams {
+  recipientIdentifier: string;
+  recipientName: string;
+  amountNgn: number;
+  destinationType: PaymentDestinationType;
+  destinationBankOrProvider?: string;
+  destinationAmount?: number;
+  destinationCurrency?: string;
+  quoteId?: string;
+}
 
 interface AccountContextType {
   currentUser: UserProfile;
   allUsers: UserProfile[];
-  switchUser: (userId: string) => void;
+  switchUser: (userId: string) => Promise<void>;
   transactions: Transaction[];
   userTransactions: Transaction[];
   subscriptions: SubscriptionMandate[];
   userSubscriptions: SubscriptionMandate[];
   testnetStatus: InterledgerNetworkStatus;
-  sendPayment: (params: {
-    recipientIdentifier: string;
-    recipientName: string;
-    amountNgn: number;
-    destinationType: PaymentDestinationType;
-    destinationBankOrProvider: string;
-    destinationAmount?: number;
-    destinationCurrency?: string;
-  }) => { success: boolean; reference: string; packetId: string };
+  sendPayment: (params: SendPaymentParams) => Promise<{ success: boolean; reference: string; error?: string }>;
   revokeMandate: (mandateId: string) => void;
   resetAllDemoData: () => void;
+  refreshTransactions: () => Promise<void>;
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined);
@@ -49,43 +52,85 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     INTERLEDGER_TESTNET_STATUS
   );
 
-  // Load persisted demo state from localStorage on client mount if available
+  // Check health and server session on mount
   useEffect(() => {
-    try {
-      const savedUserId = localStorage.getItem("veylo_current_user_id");
-      if (savedUserId && DEMO_ACCOUNTS.some((u) => u.id === savedUserId)) {
-        setCurrentUserId(savedUserId);
+    async function init() {
+      // 1. Fetch real Open Payments health
+      try {
+        const healthRes = await fetch("/api/health");
+        if (healthRes.ok) {
+          const healthData = await healthRes.json();
+          setTestnetStatus({
+            endpoint: healthData.openPayments.walletAddress || "https://wallet.interledger-test.dev",
+            connected: healthData.openPayments.isConfigured,
+            isConfigured: healthData.openPayments.isConfigured,
+            mode: healthData.openPayments.mode,
+            statusMessage: healthData.openPayments.statusMessage,
+          });
+        }
+      } catch {
+        // Fall back to offline defaults
       }
-      const savedUsers = localStorage.getItem("veylo_users_state");
-      if (savedUsers) setUsers(JSON.parse(savedUsers));
 
-      const savedTx = localStorage.getItem("veylo_transactions_state");
-      if (savedTx) setTransactions(JSON.parse(savedTx));
-
-      const savedSubs = localStorage.getItem("veylo_subscriptions_state");
-      if (savedSubs) setSubscriptions(JSON.parse(savedSubs));
-    } catch (e) {
-      // Ignore storage errors in restricted contexts
+      // 2. Fetch active server session if available
+      try {
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.authenticated && meData.user) {
+            setCurrentUserId(meData.user.id);
+          }
+        }
+      } catch {
+        // Fall back to saved or default user
+        const savedUserId = localStorage.getItem("veylo_current_user_id");
+        if (savedUserId && DEMO_ACCOUNTS.some((u) => u.id === savedUserId)) {
+          setCurrentUserId(savedUserId);
+        }
+      }
     }
+
+    init();
   }, []);
 
-  // Sync state to localStorage whenever it changes
-  useEffect(() => {
+  const refreshTransactions = useCallback(async () => {
     try {
-      localStorage.setItem("veylo_current_user_id", currentUserId);
-      localStorage.setItem("veylo_users_state", JSON.stringify(users));
-      localStorage.setItem("veylo_transactions_state", JSON.stringify(transactions));
-      localStorage.setItem("veylo_subscriptions_state", JSON.stringify(subscriptions));
-    } catch (e) {
+      const res = await fetch(`/api/payments?userId=${currentUserId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.transactions) {
+          setTransactions((prev) => {
+            const others = prev.filter((t) => t.userId !== currentUserId);
+            return [...data.transactions, ...others];
+          });
+        }
+      }
+    } catch {
       // Ignore
     }
-  }, [currentUserId, users, transactions, subscriptions]);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    refreshTransactions();
+  }, [refreshTransactions]);
 
   const currentUser = users.find((u) => u.id === currentUserId) || users[0];
 
-  const switchUser = (userId: string) => {
+  const switchUser = async (userId: string) => {
     if (users.some((u) => u.id === userId)) {
       setCurrentUserId(userId);
+      localStorage.setItem("veylo_current_user_id", userId);
+
+      // Create server demo session
+      try {
+        await fetch("/api/auth/demo-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        });
+      } catch {
+        // Continue
+      }
     }
   };
 
@@ -93,12 +138,13 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const userSubscriptions = subscriptions.filter((s) => s.userId === currentUserId);
 
   /**
-   * Executes an atomic transfer:
-   * - Debits current user's balance + 2% Veylo fee
-   * - Records outgoing transaction in sender's ledger
-   * - If recipient is one of the 5 demo accounts, credits their balance and records incoming transaction in their ledger!
+   * Executes a transfer through server-side payment orchestration:
+   * - Validates balances on the server
+   * - Checks quote expiry
+   * - Debits sender and credits recipient in server database
+   * - Returns verified transaction reference
    */
-  const sendPayment = ({
+  const sendPayment = async ({
     recipientIdentifier,
     recipientName,
     amountNgn,
@@ -106,158 +152,62 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     destinationBankOrProvider,
     destinationAmount,
     destinationCurrency = "NGN",
-  }: {
-    recipientIdentifier: string;
-    recipientName: string;
-    amountNgn: number;
-    destinationType: PaymentDestinationType;
-    destinationBankOrProvider: string;
-    destinationAmount?: number;
-    destinationCurrency?: string;
-  }) => {
-    const feeNgn = amountNgn * 0.02; // 2.0% Veylo Fee
-    const totalDebitNgn = amountNgn + feeNgn;
+    quoteId,
+  }: SendPaymentParams): Promise<{ success: boolean; reference: string; error?: string }> => {
     const reference = `VYL-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`;
-    const packet = generateIlpPreparePacket({
-      amountNgn,
-      sourceAccount: currentUser.veyloAccountNumber,
-      destinationAddress: recipientIdentifier,
-    });
 
-    const nowStr = "Just now";
-
-    // Normalize identifier and name for flexible matching across all 5 demo accounts
-    const cleanId = recipientIdentifier.trim().toLowerCase().replace(/[\s\-\•]/g, "");
-    const cleanName = recipientName.trim().toLowerCase();
-
-    // 1. Check if recipient matches any of the demo accounts
-    const matchedRecipient = users.find((u) => {
-      if (u.id === currentUser.id) return false;
-      const uAcc = u.veyloAccountNumber.replace(/[\s\-\•]/g, "").toLowerCase();
-      const uHandle = u.handle.toLowerCase().replace("@", "");
-      const uName = u.name.toLowerCase();
-      const uBankAcc = u.connectedBank.accountNumber.replace(/[\s\-\•]/g, "").toLowerCase();
-      const uOp = u.openPaymentsAddress.toLowerCase();
-
-      return (
-        uAcc === cleanId ||
-        cleanId.includes(uAcc) ||
-        uHandle === cleanId ||
-        cleanId.includes(uHandle) ||
-        cleanName.includes(uName) ||
-        uName.includes(cleanName) ||
-        (cleanId.length >= 4 && uBankAcc.includes(cleanId)) ||
-        (cleanId.length >= 4 && cleanId.includes(uBankAcc)) ||
-        cleanId.includes(uOp) ||
-        uOp.includes(cleanId)
-      );
-    });
-
-    // 2. Outgoing transaction for sender
-    const senderTx: Transaction = {
-      id: `tx_${Date.now()}_send`,
-      userId: currentUser.id,
-      title: `Transfer to ${recipientName}`,
-      destinationType,
-      recipientName,
-      recipientIdentifier,
-      destinationBankOrProvider,
-      sourceFunding: `Connected Bank: ${currentUser.connectedBank.bankName} (${currentUser.connectedBank.accountNumber})`,
-      amountNgn,
-      destinationAmount,
-      destinationCurrency,
-      feeNgn,
-      status: "settled",
-      timestamp: nowStr,
-      reference,
-      interledgerPacketId: packet.packetId,
-      category: "transfer",
-    };
-
-    // 3. Incoming transaction for recipient if internal demo user
-    const recipientTx: Transaction | null = matchedRecipient
-      ? {
-          id: `tx_${Date.now()}_recv`,
-          userId: matchedRecipient.id,
-          title: `Received from ${currentUser.name}`,
-          destinationType: "veylo",
-          recipientName: currentUser.name,
-          recipientIdentifier: currentUser.veyloAccountNumber,
-          destinationBankOrProvider: matchedRecipient.connectedBank.bankName,
-          sourceFunding: `Veylo Account: ${currentUser.name} (${currentUser.veyloAccountNumber})`,
-          amountNgn,
-          destinationAmount,
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: currentUser.id,
+          quoteId,
+          recipientIdentifier,
+          amount: amountNgn,
+          destinationType,
           destinationCurrency,
-          feeNgn: 0,
-          status: "settled",
-          timestamp: nowStr,
           reference,
-          interledgerPacketId: packet.packetId,
-          category: "deposit",
-        }
-      : null;
-
-    // 4. Update state for both sender and recipient
-    setUsers((prevUsers) => {
-      const updated = prevUsers.map((u) => {
-        if (u.id === currentUser.id) {
-          const updatedForeign = u.foreignBalance
-            ? {
-                ...u.foreignBalance,
-                amount: Math.max(
-                  0,
-                  u.foreignBalance.amount - (destinationAmount || amountNgn / (u.currency === "GBP" ? 2040 : 2200))
-                ),
-              }
-            : undefined;
-
-          return {
-            ...u,
-            totalBalanceNgn: Math.max(0, u.totalBalanceNgn - totalDebitNgn),
-            availableBalanceNgn: Math.max(0, u.availableBalanceNgn - totalDebitNgn),
-            foreignBalance: updatedForeign,
-          };
-        }
-        if (matchedRecipient && u.id === matchedRecipient.id) {
-          const creditedForeign = u.foreignBalance
-            ? {
-                ...u.foreignBalance,
-                amount:
-                  u.foreignBalance.amount +
-                  (destinationAmount || amountNgn / (u.currency === "GBP" ? 2040 : 2200)),
-              }
-            : undefined;
-
-          return {
-            ...u,
-            totalBalanceNgn: u.totalBalanceNgn + amountNgn,
-            availableBalanceNgn: u.availableBalanceNgn + amountNgn,
-            foreignBalance: creditedForeign,
-          };
-        }
-        return u;
+        }),
       });
 
-      try {
-        localStorage.setItem("veylo_users_state", JSON.stringify(updated));
-      } catch (e) {}
+      const data = await res.json();
 
-      return updated;
-    });
+      if (!res.ok) {
+        return {
+          success: false,
+          reference: "",
+          error: data.error || "Payment failed to process.",
+        };
+      }
 
-    setTransactions((prev) => {
-      const updated = [senderTx, ...(recipientTx ? [recipientTx] : []), ...prev];
-      try {
-        localStorage.setItem("veylo_transactions_state", JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
+      // Sync updated balance from server response
+      if (typeof data.newSenderBalance === "number") {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === currentUser.id
+              ? { ...u, availableBalanceNgn: data.newSenderBalance, totalBalanceNgn: data.newSenderBalance }
+              : u
+          )
+        );
+      }
 
-    return {
-      success: true,
-      reference,
-      packetId: packet.packetId,
-    };
+      // Add transaction to local state
+      if (data.transaction) {
+        setTransactions((prev) => [data.transaction, ...prev]);
+      }
+
+      return {
+        success: true,
+        reference: data.transaction?.reference || reference,
+      };
+    } catch {
+      return {
+        success: false,
+        reference: "",
+        error: "Network error connecting to payment gateway.",
+      };
+    }
   };
 
   const revokeMandate = (mandateId: string) => {
@@ -271,9 +221,14 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTransactions(INITIAL_TRANSACTIONS);
     setSubscriptions(MOCK_SUBSCRIPTIONS);
     setCurrentUserId("usr_tomi");
+
+    // Scoped cleanup only — NEVER call localStorage.clear()
     try {
-      localStorage.clear();
-    } catch (e) {
+      localStorage.removeItem("veylo_current_user_id");
+      localStorage.removeItem("veylo_users_state");
+      localStorage.removeItem("veylo_transactions_state");
+      localStorage.removeItem("veylo_subscriptions_state");
+    } catch {
       // Ignore
     }
   };
@@ -292,6 +247,7 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
         sendPayment,
         revokeMandate,
         resetAllDemoData,
+        refreshTransactions,
       }}
     >
       {children}

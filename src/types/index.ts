@@ -119,8 +119,11 @@ export interface BudgetOverview {
 export interface InterledgerNetworkStatus {
   endpoint: string;
   connected: boolean;
-  latencyMs: number;
-  activeConnectors: number;
-  testnetEnv: "https://wallet.interledger-test.dev";
-  lastPing: string;
+  latencyMs?: number;
+  activeConnectors?: number;
+  testnetEnv?: string;
+  lastPing?: string;
+  isConfigured?: boolean;
+  mode?: "live_testnet" | "demo_simulated";
+  statusMessage?: string;
 }

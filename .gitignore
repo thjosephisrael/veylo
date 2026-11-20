@@ -37,3 +37,6 @@ next-env.d.ts
 /.agents/
 /.bin/
 /brag-output/
+
+# server database
+/.data/

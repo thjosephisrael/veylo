@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { AppLayoutClient } from "@/components/layout/AppLayoutClient";
 import { Card } from "@/components/ui/Card";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { UK_BANKS, EU_BANKS } from "@/data/mockData";
 import { useAccount } from "@/context/AccountContext";
 import {
   Globe2,
@@ -26,7 +25,7 @@ import {
 } from "lucide-react";
 
 export default function InternationalTransferPage() {
-  const { currentUser, allUsers, sendPayment } = useAccount();
+  const { currentUser, sendPayment } = useAccount();
 
   const [destinationCountry, setDestinationCountry] = useState<"GB" | "EU" | "UNSUPPORTED">("GB");
   const [sortCode, setSortCode] = useState("40-22-18");
@@ -38,30 +37,92 @@ export default function InternationalTransferPage() {
   // Routing Mode: Direct Interledger Bank Endpoint vs Local Payout Partner
   const [routeMode, setRouteMode] = useState<"direct_ilp" | "payout_partner">("direct_ilp");
 
-  // Live Quote & Timer
-  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(58);
-  const fxRate = destinationCountry === "GB" ? 2040.0 : 2200.0;
+  // Live Quote & Server Expiry
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [quoteExpiresAt, setQuoteExpiresAt] = useState<string | null>(null);
+  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState(60);
+  const [isQuoteExpired, setIsQuoteExpired] = useState(false);
+  const [isFetchingQuote, setIsFetchingQuote] = useState(false);
+
+  const fxRate = destinationCountry === "GB" ? 2040.0 : 1885.0;
   const parsedFx = parseFloat(fxAmount) || 0;
   const ngnEquivalent = parsedFx * fxRate;
-  const veyloFeeNgn = ngnEquivalent * 0.02; // 2.0%
+  const veyloFeeNgn = Number((ngnEquivalent * 0.02).toFixed(2)); // 2.0%
   const totalDebitNgn = ngnEquivalent + veyloFeeNgn;
 
-  // Authorization Modal
+  // Authorization Modal State
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [transferSettled, setTransferSettled] = useState(false);
   const [transferResult, setTransferResult] = useState<{
     reference: string;
-    packetId: string;
     recipient: string;
   } | null>(null);
 
+  // Fetch verified quote from server
+  const fetchServerQuote = useCallback(async () => {
+    if (parsedFx <= 0 || destinationCountry === "UNSUPPORTED") return;
+
+    setIsFetchingQuote(true);
+    setIsQuoteExpired(false);
+
+    try {
+      const targetCurrency = destinationCountry === "GB" ? "GBP" : "EUR";
+      const destinationAddress =
+        destinationCountry === "GB"
+          ? "https://ilp.interledger-test.dev/arthur"
+          : "https://ilp.interledger-test.dev/kafeartisan";
+
+      const res = await fetch("/api/payments/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: currentUser.id,
+          destinationAddress,
+          sourceAmountNgn: ngnEquivalent,
+          targetCurrency,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setQuoteId(data.quoteId);
+        setQuoteExpiresAt(data.expiresAt);
+        setQuoteSecondsLeft(data.expiresInSeconds || 60);
+      }
+    } catch {
+      // Fallback local expiry
+      setQuoteExpiresAt(new Date(Date.now() + 60000).toISOString());
+      setQuoteSecondsLeft(60);
+    } finally {
+      setIsFetchingQuote(false);
+    }
+  }, [parsedFx, destinationCountry, currentUser.id, ngnEquivalent]);
+
   useEffect(() => {
+    fetchServerQuote();
+  }, [destinationCountry, fetchServerQuote]);
+
+  // Strict countdown timer respecting actual expiry
+  useEffect(() => {
+    if (!quoteExpiresAt) return;
+
     const timer = setInterval(() => {
-      setQuoteSecondsLeft((prev) => (prev > 1 ? prev - 1 : 60));
+      const diff = Math.max(
+        0,
+        Math.floor((new Date(quoteExpiresAt).getTime() - Date.now()) / 1000)
+      );
+      setQuoteSecondsLeft(diff);
+
+      if (diff <= 0) {
+        setIsQuoteExpired(true);
+        clearInterval(timer);
+      }
     }, 1000);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [quoteExpiresAt]);
 
   const handleCountryChange = (country: "GB" | "EU" | "UNSUPPORTED") => {
     setDestinationCountry(country);
@@ -77,58 +138,69 @@ export default function InternationalTransferPage() {
     }
   };
 
-  const handleAuthorize = () => {
+  const handleAuthorize = async () => {
+    if (isQuoteExpired) {
+      setAuthError("Quote has expired. Please refresh the quote to proceed.");
+      return;
+    }
+
     setIsAuthorizing(true);
-    setTimeout(() => {
-      setIsAuthorizing(false);
+    setAuthError(null);
 
-      const destinationCurrency = destinationCountry === "GB" ? "GBP" : "EUR";
-      const bankOrProvider =
-        destinationCountry === "GB"
-          ? routeMode === "direct_ilp"
-            ? "Barclays Direct ILP Endpoint"
-            : "UK Faster Payments Partner (ClearBank)"
-          : routeMode === "direct_ilp"
-          ? "SEPA Direct Interledger Endpoint"
-          : "Eurozone Clearing Partner";
+    const destinationCurrency = destinationCountry === "GB" ? "GBP" : "EUR";
+    const bankOrProvider =
+      destinationCountry === "GB"
+        ? routeMode === "direct_ilp"
+          ? "Barclays Direct ILP Endpoint"
+          : "UK Faster Payments Partner"
+        : routeMode === "direct_ilp"
+        ? "SEPA Direct Interledger Endpoint"
+        : "Eurozone Clearing Partner";
 
-      const recipientIdentifier =
-        destinationCountry === "GB"
-          ? `Sort ${sortCode} • Acct ${accountNumber}`
-          : iban;
+    const recipientIdentifier =
+      destinationCountry === "GB"
+        ? `Sort ${sortCode} • Acct ${accountNumber}`
+        : iban;
 
-      const recipientName = resolvedRecipient || "International Beneficiary";
+    const recipientName = resolvedRecipient || "International Beneficiary";
 
-      const res = sendPayment({
-        recipientIdentifier,
-        recipientName,
-        amountNgn: ngnEquivalent,
-        destinationType: "international_bank",
-        destinationBankOrProvider: bankOrProvider,
-        destinationAmount: parsedFx,
-        destinationCurrency,
-      });
+    const res = await sendPayment({
+      recipientIdentifier,
+      recipientName,
+      amountNgn: ngnEquivalent,
+      destinationType: "international_bank",
+      destinationBankOrProvider: bankOrProvider,
+      destinationAmount: parsedFx,
+      destinationCurrency,
+      quoteId: quoteId || undefined,
+    });
 
-      setTransferResult({
-        reference: res.reference,
-        packetId: res.packetId,
-        recipient: recipientName,
-      });
+    setIsAuthorizing(false);
 
-      setTransferSettled(true);
-    }, 1000);
+    if (!res.success) {
+      setAuthError(res.error || "Transfer failed to process.");
+      return;
+    }
+
+    setTransferResult({
+      reference: res.reference,
+      recipient: recipientName,
+    });
+
+    setTransferSettled(true);
   };
 
   const handleReset = () => {
     setAuthModalOpen(false);
     setTransferSettled(false);
     setTransferResult(null);
+    setAuthError(null);
   };
 
   return (
     <AppLayoutClient
       title="International Transfer"
-      subtitle="Interledger Cross-Border Routing • Direct Bank Endpoints & Payout Partners"
+      subtitle="Cross-Border Value Movement via Open Payments & Partner Rails"
     >
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Architecture Notice Banner */}
@@ -139,15 +211,15 @@ export default function InternationalTransferPage() {
             </div>
             <div>
               <p className="text-xs font-mono uppercase tracking-wider text-acid-lime font-bold">
-                Interledger Direct Value Routing
+                Cross-Border Settlement Routing
               </p>
               <p className="text-xs text-slate-300 mt-0.5">
-                Zero correspondent banks. Currency conversion occurs on-the-fly inside Interledger connectors, settling directly into the foreign recipient&apos;s commercial bank.
+                Direct Open Payments value movement between currency corridors. External commercial bank delivery operates through licensed partner clearing rails.
               </p>
             </div>
           </div>
           <Badge variant="lime" size="sm" className="shrink-0 self-start sm:self-center">
-            Zero Intermediary Deductions
+            Test Environment • Play Money
           </Badge>
         </div>
 
@@ -157,10 +229,10 @@ export default function InternationalTransferPage() {
             <Card variant="white" className="space-y-6">
               <div className="border-b border-slate-100 pb-4">
                 <h2 className="text-lg font-bold text-midnight-950 font-sans">
-                  Destination Country & Bank
+                  Destination Country & Corridor
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Select destination corridor to adapt required clearing fields
+                  Select corridor to adapt clearing parameters
                 </p>
               </div>
 
@@ -261,10 +333,10 @@ export default function InternationalTransferPage() {
                 <div className="p-6 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-3">
                   <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto" />
                   <h4 className="text-sm font-bold text-amber-950">
-                    No Interledger Route Currently Available
+                    Corridor Not Available in Test Environment
                   </h4>
                   <p className="text-xs text-amber-800 leading-relaxed max-w-sm mx-auto">
-                    There are no participating connectors with sufficient liquidity for this corridor right now. Please select United Kingdom (GBP) or Eurozone (EUR) to continue.
+                    The requested corridor is not configured in this test environment. Please select United Kingdom (GBP) or Eurozone (EUR) to continue.
                   </p>
                   <Button
                     variant="outline"
@@ -297,20 +369,19 @@ export default function InternationalTransferPage() {
                         />
                       </div>
 
-                      {/* Recipient Resolution Pill */}
                       {resolvedRecipient && (
-                        <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-1">
-                          <div className="flex items-center justify-between text-xs font-mono text-emerald-800">
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                          <div className="flex items-center justify-between text-xs font-mono text-slate-700">
                             <span className="flex items-center gap-1 font-bold">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                              CONFIRMATION OF PAYEE MATCH
+                              SELECTED RECIPIENT
                             </span>
-                            <span>Barclays Bank UK</span>
+                            <span>Barclays Bank UK (Demo)</span>
                           </div>
-                          <p className="text-base font-black text-emerald-950 font-sans">
+                          <p className="text-base font-black text-midnight-950 font-sans">
                             {resolvedRecipient}
                           </p>
-                          <p className="text-xs text-emerald-700 font-mono">
+                          <p className="text-xs text-slate-500 font-mono">
                             Sort Code {sortCode} • Account {accountNumber}
                           </p>
                         </div>
@@ -334,18 +405,18 @@ export default function InternationalTransferPage() {
                         placeholder="e.g. DEUT..."
                       />
                       {resolvedRecipient && (
-                        <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-1">
-                          <div className="flex items-center justify-between text-xs font-mono text-emerald-800">
+                        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                          <div className="flex items-center justify-between text-xs font-mono text-slate-700">
                             <span className="flex items-center gap-1 font-bold">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                              SEPA VERIFIED BENEFICIARY
+                              SELECTED RECIPIENT
                             </span>
-                            <span>Direct Interledger Endpoint</span>
+                            <span>Eurozone Commercial Endpoint</span>
                           </div>
-                          <p className="text-base font-black text-emerald-950 font-sans">
+                          <p className="text-base font-black text-midnight-950 font-sans">
                             {resolvedRecipient}
                           </p>
-                          <p className="text-xs text-emerald-700 font-mono">
+                          <p className="text-xs text-slate-500 font-mono">
                             IBAN: {iban}
                           </p>
                         </div>
@@ -373,14 +444,14 @@ export default function InternationalTransferPage() {
                     />
                   </div>
 
-                  {/* Route Topology Selector (Mode 1 vs Mode 2) */}
+                  {/* Route Topology Selector */}
                   <div className="space-y-2 pt-2 border-t border-slate-100">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
-                        Interledger Settlement Path
+                        Clearing Route Mode
                       </label>
-                      <span className="text-[11px] font-mono text-electric-cobalt">
-                        Zero correspondent banks
+                      <span className="text-[11px] font-mono text-slate-500">
+                        Configured Settlement Path
                       </span>
                     </div>
 
@@ -399,7 +470,7 @@ export default function InternationalTransferPage() {
                           {routeMode === "direct_ilp" && <Check className="w-3.5 h-3.5 text-electric-cobalt" />}
                         </div>
                         <p className="text-[11px] text-slate-500 leading-tight">
-                          Receiving bank participates directly on Interledger network.
+                          Direct Open Payments peer connector endpoint.
                         </p>
                       </button>
 
@@ -417,7 +488,7 @@ export default function InternationalTransferPage() {
                           {routeMode === "payout_partner" && <Check className="w-3.5 h-3.5 text-electric-cobalt" />}
                         </div>
                         <p className="text-[11px] text-slate-500 leading-tight">
-                          Integrated financial provider clears to local commercial rails.
+                          Integrated financial provider clearing to local domestic rails.
                         </p>
                       </button>
                     </div>
@@ -427,11 +498,16 @@ export default function InternationalTransferPage() {
                     variant="primary"
                     size="lg"
                     onClick={() => setAuthModalOpen(true)}
-                    disabled={!resolvedRecipient || parsedFx <= 0 || totalDebitNgn > currentUser.availableBalanceNgn}
+                    disabled={
+                      !resolvedRecipient ||
+                      parsedFx <= 0 ||
+                      totalDebitNgn > currentUser.availableBalanceNgn ||
+                      isQuoteExpired
+                    }
                     className="w-full justify-center"
                     rightIcon={<ArrowRight className="w-5 h-5" />}
                   >
-                    Proceed with Quote
+                    {isQuoteExpired ? "Quote Expired — Please Refresh" : "Review and Authorise Transfer"}
                   </Button>
                 </>
               )}
@@ -443,25 +519,52 @@ export default function InternationalTransferPage() {
             <Card variant="midnight" className="space-y-6">
               <div className="flex items-center justify-between pb-3 border-b border-midnight-800">
                 <div className="flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 text-acid-lime animate-spin-slow" />
+                  <button
+                    type="button"
+                    onClick={fetchServerQuote}
+                    className="p-1 hover:bg-midnight-800 rounded transition-colors"
+                    title="Refresh quote"
+                  >
+                    <RefreshCw
+                      className={`w-4 h-4 text-acid-lime ${
+                        isFetchingQuote ? "animate-spin" : ""
+                      }`}
+                    />
+                  </button>
                   <span className="text-xs font-mono uppercase tracking-wider text-slate-300 font-bold">
-                    Live Connector FX Quote
+                    Connector FX Quote
                   </span>
                 </div>
-                <span className="text-[11px] font-mono text-acid-lime bg-midnight-900 px-2 py-0.5 rounded-full border border-midnight-800">
-                  {quoteSecondsLeft}s remaining
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
+                      isQuoteExpired
+                        ? "text-red-400 bg-red-950/50 border-red-800"
+                        : "text-acid-lime bg-midnight-900 border-midnight-800"
+                    }`}
+                  >
+                    {isQuoteExpired ? "Expired" : `${quoteSecondsLeft}s remaining`}
+                  </span>
+                  {isQuoteExpired && (
+                    <button
+                      onClick={fetchServerQuote}
+                      className="text-[10px] text-acid-lime underline font-mono hover:opacity-80"
+                    >
+                      Refresh
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Rate & Equivalent Box */}
               <div className="space-y-3">
                 <div className="text-xs font-mono text-slate-400">
-                  <span>MARKET EXCHANGE RATE</span>
+                  <span>INDICATIVE EXCHANGE RATE</span>
                   <p className="text-xl font-bold font-mono text-white mt-1">
                     1 {destinationCountry === "GB" ? "GBP" : "EUR"} = ₦{fxRate.toLocaleString("en-NG")} NGN
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    Interledger peer connector quote • Zero spread markup
+                    Open Payments corridor quote breakdown
                   </p>
                 </div>
 
@@ -479,14 +582,14 @@ export default function InternationalTransferPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-slate-300">
-                    <span>Veylo Fee (2.0%):</span>
+                    <span>Veylo Platform Fee (2.0%):</span>
                     <span className="text-acid-lime">
                       ₦{veyloFeeNgn.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="flex justify-between text-slate-300">
-                    <span>Intermediary Bank Fee:</span>
-                    <span className="text-emerald-400 font-bold">₦0.00 (Direct ILP)</span>
+                    <span>Partner Rail Fee:</span>
+                    <span className="text-slate-400">₦0.00 (Testnet Mode)</span>
                   </div>
                   <div className="pt-2 border-t border-midnight-800 flex justify-between text-sm font-bold text-white">
                     <span>Total Debited:</span>
@@ -506,29 +609,29 @@ export default function InternationalTransferPage() {
               {/* Routing Visualizer */}
               <div className="p-4 rounded-2xl bg-midnight-950 border border-midnight-800 space-y-3 text-xs">
                 <span className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">
-                  Active Value Route Topology
+                  Settlement Topology
                 </span>
                 <div className="space-y-2 font-mono text-[11px]">
                   <div className="flex items-center gap-2 text-slate-300">
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span>Tier 1: {currentUser.name} ({currentUser.connectedBank.bankName})</span>
+                    <span>Sender: {currentUser.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-acid-lime">
                     <span className="w-2 h-2 rounded-full bg-acid-lime" />
-                    <span>Tier 2: ILP Connector (FX NGN → {destinationCountry === "GB" ? "GBP" : "EUR"})</span>
+                    <span>Open Payments Routing (NGN → {destinationCountry === "GB" ? "GBP" : "EUR"})</span>
                   </div>
                   <div className="flex items-center gap-2 text-electric-cobalt">
                     <span className="w-2 h-2 rounded-full bg-electric-cobalt" />
                     <span>
                       {routeMode === "direct_ilp"
-                        ? `Tier 3: ${destinationCountry === "GB" ? "Barclays Direct ILP Endpoint" : "SEPA Direct Interledger Endpoint"}`
-                        : `Tier 3: Payout Partner (${destinationCountry === "GB" ? "ClearBank UK" : "Eurozone Clearing"})`}
+                        ? `Receiving Endpoint: Direct Open Payments`
+                        : `Receiving Endpoint: Local Clearing Rail`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <span className="w-2 h-2 rounded-full bg-white" />
                     <span>
-                      Tier 4: {resolvedRecipient || "Foreign Beneficiary"}
+                      Beneficiary: {resolvedRecipient || "Foreign Beneficiary"}
                     </span>
                   </div>
                 </div>
@@ -537,21 +640,25 @@ export default function InternationalTransferPage() {
           </div>
         </div>
 
-        {/* ========================================================
-            AUTHORIZATION MODAL FOR INTERNATIONAL TRANSFER
-           ======================================================== */}
+        {/* AUTHORIZATION MODAL */}
         <Modal
           isOpen={authModalOpen}
           onClose={handleReset}
-          title={transferSettled ? "International Payment Cleared" : "Confirm International Transfer"}
+          title={transferSettled ? "Payment Cleared" : "Confirm International Transfer"}
           subtitle={
             transferSettled
-              ? `Settled in recipient's foreign bank account via Interledger`
-              : "Review live Interledger conversion details"
+              ? "Funds cleared and recorded in server ledger"
+              : "Review transfer and quote details before approving"
           }
         >
           {!transferSettled ? (
             <div className="space-y-6">
+              {authError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                  {authError}
+                </div>
+              )}
+
               <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200/80 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Sender Account:</span>
@@ -589,16 +696,22 @@ export default function InternationalTransferPage() {
                 </div>
               </div>
 
-              <Button
-                variant="lime"
-                size="lg"
-                onClick={handleAuthorize}
-                isLoading={isAuthorizing}
-                className="w-full justify-center font-bold"
-                leftIcon={<ShieldCheck className="w-5 h-5 text-midnight-950" />}
-              >
-                Authorise Transfer with Passkey
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={handleAuthorize}
+                  isLoading={isAuthorizing}
+                  disabled={isQuoteExpired}
+                  className="w-full justify-center font-bold"
+                  leftIcon={<ShieldCheck className="w-5 h-5 text-white" />}
+                >
+                  {isQuoteExpired ? "Quote Expired — Please Refresh" : "Approve International Transfer"}
+                </Button>
+                <p className="text-[11px] text-center text-slate-400 font-mono">
+                  Test environment execution • Play money
+                </p>
+              </div>
             </div>
           ) : (
             <div className="text-center space-y-5 py-2">
@@ -608,7 +721,7 @@ export default function InternationalTransferPage() {
 
               <div>
                 <h4 className="text-xl font-black text-midnight-950 font-sans">
-                  {destinationCountry === "GB" ? `£${parsedFx.toFixed(2)} GBP` : `€${parsedFx.toFixed(2)} EUR`} Delivered
+                  {destinationCountry === "GB" ? `£${parsedFx.toFixed(2)} GBP` : `€${parsedFx.toFixed(2)} EUR`} Sent
                 </h4>
                 <p className="text-xs text-slate-500 mt-1">
                   Reference: <span className="font-mono text-slate-700">{transferResult?.reference}</span>
@@ -618,26 +731,18 @@ export default function InternationalTransferPage() {
               <div className="rounded-2xl bg-slate-50 p-4 border border-slate-200 text-xs text-left space-y-1.5 font-mono">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Destination:</span>
-                  <span>{transferResult?.recipient}</span>
+                  <span className="font-bold text-slate-900">{transferResult?.recipient}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Execution Speed:</span>
-                  <span className="text-emerald-600 font-bold">3.8 seconds (Instant)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Correspondent Deduction:</span>
-                  <span className="text-emerald-600 font-bold">£0.00 / €0.00</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ILP Packet:</span>
-                  <span className="text-electric-cobalt truncate max-w-[170px]">{transferResult?.packetId}</span>
+                <div className="flex justify-between text-emerald-600 font-bold">
+                  <span>Settlement Status:</span>
+                  <span>Settled (Recorded in Server Ledger)</span>
                 </div>
               </div>
 
               <div className="p-3 bg-slate-100 rounded-xl text-xs text-slate-600 text-left space-y-1">
-                <p className="font-bold text-midnight-950">✓ Ledger Updated Successfully</p>
+                <p className="font-bold text-midnight-950">✓ Server Ledger Updated</p>
                 <p className="text-[11px] text-slate-500">
-                  Sender balance debited. Beneficiary credited via Interledger. Sign out at the bottom left to log into {transferResult?.recipient}&apos;s account and view their incoming credit!
+                  Sender balance debited. To verify the credit in {transferResult?.recipient}&apos;s account, switch persona at the bottom left.
                 </p>
               </div>
 

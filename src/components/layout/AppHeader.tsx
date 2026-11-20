@@ -56,11 +56,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </Button>
         )}
 
-        {/* Live Interledger Testnet Status Pill */}
+        {/* Truthful Environment Status Pill */}
         <div className="hidden lg:flex items-center gap-2 bg-[#F1F5F9] border border-[#E2E8F0] rounded-full px-3 py-1">
-          <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+          <span
+            className={`w-2 h-2 rounded-full ${
+              testnetStatus.isConfigured
+                ? "bg-[#10B981] animate-pulse"
+                : "bg-amber-500"
+            }`}
+          />
           <span className="text-[11px] font-mono font-medium text-slate-700">
-            ILP Testnet • {testnetStatus.latencyMs}ms
+            {testnetStatus.isConfigured
+              ? "Open Payments Testnet"
+              : "Test Environment • Play Money"}
           </span>
         </div>
 

@@ -49,9 +49,9 @@ export default function SendMoneyPage() {
   // Authorization Modal State
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [transferResult, setTransferResult] = useState<{
     reference: string;
-    packetId: string;
     recipient: string;
   } | null>(null);
 
@@ -75,7 +75,7 @@ export default function SendMoneyPage() {
           setResolvedName("Oluwatobi Adebayo");
         } else {
           const currentBank = NIGERIAN_BANKS.find((b) => b.id === selectedBank)?.name || "Commercial Bank";
-          setResolvedName(`Verified Beneficiary (${currentBank})`);
+          setResolvedName(`Demo Beneficiary (${currentBank})`);
         }
       }, 300);
     } else {
@@ -118,43 +118,48 @@ export default function SendMoneyPage() {
   const veyloFee = parsedAmount * 0.02; // 2.0% Veylo transaction fee rule
   const totalDebit = parsedAmount + veyloFee;
 
-  const handleAuthorize = () => {
+  const handleAuthorize = async () => {
     setIsAuthenticating(true);
-    setTimeout(() => {
-      setIsAuthenticating(false);
+    setAuthError(null);
 
-      const recipientName =
-        activeTab === "nigerian_bank"
-          ? (resolvedName || "Nigerian Beneficiary")
-          : (resolvedVeyloUser || "Veylo Recipient");
+    const recipientName =
+      activeTab === "nigerian_bank"
+        ? (resolvedName || "Nigerian Beneficiary")
+        : (resolvedVeyloUser || "Veylo Recipient");
 
-      const recipientIdentifier =
-        activeTab === "nigerian_bank" ? accountNumber : veyloRecipientInput;
+    const recipientIdentifier =
+      activeTab === "nigerian_bank" ? accountNumber : veyloRecipientInput;
 
-      const bankOrProvider =
-        activeTab === "nigerian_bank"
-          ? (NIGERIAN_BANKS.find((b) => b.id === selectedBank)?.name || "Nigerian Bank")
-          : "Open Payments Interledger";
+    const bankOrProvider =
+      activeTab === "nigerian_bank"
+        ? (NIGERIAN_BANKS.find((b) => b.id === selectedBank)?.name || "Nigerian Bank")
+        : "Open Payments Interledger";
 
-      const res = sendPayment({
-        recipientIdentifier,
-        recipientName,
-        amountNgn: parsedAmount,
-        destinationType: activeTab === "nigerian_bank" ? "nigerian_bank" : "veylo",
-        destinationBankOrProvider: bankOrProvider,
-      });
+    const res = await sendPayment({
+      recipientIdentifier,
+      recipientName,
+      amountNgn: parsedAmount,
+      destinationType: activeTab === "nigerian_bank" ? "nigerian_bank" : "veylo",
+      destinationBankOrProvider: bankOrProvider,
+    });
 
-      setTransferResult({
-        reference: res.reference,
-        packetId: res.packetId,
-        recipient: recipientName,
-      });
-    }, 800);
+    setIsAuthenticating(false);
+
+    if (!res.success) {
+      setAuthError(res.error || "Payment failed to process.");
+      return;
+    }
+
+    setTransferResult({
+      reference: res.reference,
+      recipient: recipientName,
+    });
   };
 
   const handleReset = () => {
     setAuthModalOpen(false);
     setTransferResult(null);
+    setAuthError(null);
   };
 
   return (
@@ -296,22 +301,24 @@ export default function SendMoneyPage() {
               )}
 
               {resolvedName && !isResolving && (
-                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1">
-                  <div className="flex items-center justify-between text-xs font-mono text-emerald-800">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-700">
                     <span className="flex items-center gap-1 font-bold">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      BENEFICIARY CONFIRMED
+                      SELECTED DEMO BENEFICIARY
                     </span>
-                    <span>NIBSS / NIP Match</span>
+                    <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Simulated Partner Payout
+                    </span>
                   </div>
-                  <p className="text-base font-black text-emerald-950 font-sans">
+                  <p className="text-base font-black text-midnight-950 font-sans">
                     {resolvedName}
                   </p>
-                  <p className="text-xs text-emerald-700 font-mono">
+                  <p className="text-xs text-slate-600 font-mono">
                     {NIGERIAN_BANKS.find((b) => b.id === selectedBank)?.name} • {accountNumber}
                   </p>
-                  <p className="text-[11px] text-slate-500 pt-1">
-                    Your recipient does not need a Veylo account to receive this transfer.
+                  <p className="text-[11px] text-slate-400 pt-1">
+                    Simulated commercial bank destination for demo testing.
                   </p>
                 </div>
               )}
@@ -509,37 +516,26 @@ export default function SendMoneyPage() {
                 </div>
               </div>
 
+              {authError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+                  {authError}
+                </div>
+              )}
+
               <div className="space-y-3">
                 <Button
-                  variant="lime"
+                  variant="primary"
                   size="lg"
                   onClick={handleAuthorize}
                   isLoading={isAuthenticating}
                   className="w-full justify-center font-bold"
-                  leftIcon={<ShieldCheck className="w-5 h-5 text-midnight-950" />}
+                  leftIcon={<ShieldCheck className="w-5 h-5 text-white" />}
                 >
-                  Authorise with Face ID / Passkey
+                  Approve Payment
                 </Button>
-
-                <div className="relative flex items-center justify-center">
-                  <div className="border-t border-slate-200 w-full" />
-                  <span className="bg-white px-2 text-[11px] font-mono text-slate-400 uppercase">
-                    or enter 6-digit PIN
-                  </span>
-                </div>
-
-                <div className="flex justify-center gap-2">
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <input
-                      key={i}
-                      type="password"
-                      maxLength={1}
-                      defaultValue={i < 4 ? "•" : ""}
-                      className="w-10 h-12 text-center text-lg font-bold border border-slate-200 rounded-xl bg-slate-50"
-                      readOnly
-                    />
-                  ))}
-                </div>
+                <p className="text-[11px] text-center text-slate-400 font-mono">
+                  Test environment authorization • Play money
+                </p>
               </div>
             </div>
           ) : (
@@ -550,7 +546,7 @@ export default function SendMoneyPage() {
 
               <div>
                 <h4 className="text-xl font-black text-midnight-950 font-sans">
-                  ₦{parsedAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} Cleared
+                  ₦{parsedAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })} Sent
                 </h4>
                 <p className="text-xs text-slate-500 mt-1">
                   Reference: <span className="font-mono text-slate-700">{transferResult.reference}</span>
@@ -562,20 +558,16 @@ export default function SendMoneyPage() {
                   <span className="text-slate-500">Recipient:</span>
                   <span className="font-bold text-slate-900">{transferResult.recipient}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ILP Packet Hash:</span>
-                  <span className="text-electric-cobalt truncate max-w-[170px]">{transferResult.packetId}</span>
-                </div>
                 <div className="flex justify-between text-emerald-600 font-bold">
                   <span>Settlement Status:</span>
-                  <span>Direct ILP Instant (2.4s)</span>
+                  <span>Settled (Recorded in Server Ledger)</span>
                 </div>
               </div>
 
               <div className="p-3 bg-slate-100 rounded-xl text-xs text-slate-600 text-left space-y-1">
-                <p className="font-bold text-midnight-950">✓ Ledger Updated Successfully</p>
+                <p className="font-bold text-midnight-950">✓ Server Ledger Updated</p>
                 <p className="text-[11px] text-slate-500">
-                  Your balance has been debited. To verify the credited balance and receipt for {transferResult.recipient}, sign out at the bottom left and log into their account.
+                  Your balance has been debited. To verify the credited balance and receipt for {transferResult.recipient}, sign out at the bottom left and switch to their account.
                 </p>
               </div>
 

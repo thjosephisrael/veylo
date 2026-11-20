@@ -452,9 +452,8 @@ export const MOCK_BUDGET: BudgetOverview = {
 
 export const INTERLEDGER_TESTNET_STATUS: InterledgerNetworkStatus = {
   endpoint: "https://wallet.interledger-test.dev",
-  connected: true,
-  latencyMs: 142,
-  activeConnectors: 14,
-  testnetEnv: "https://wallet.interledger-test.dev",
-  lastPing: "Just now",
+  connected: false,
+  isConfigured: false,
+  mode: "demo_simulated",
+  statusMessage: "Test environment · Play money",
 };
