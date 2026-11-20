@@ -76,12 +76,6 @@ export default function MarketingHomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
               {/* Left Column: Hero Typography & CTAs (Figma 51:23) */}
               <div className="lg:col-span-7 space-y-6 text-left">
-                {/* Pill Tag */}
-                <div className="inline-flex items-center gap-2 rounded-[14px] bg-[#111B32] px-3.5 py-1.5 text-[11px] font-mono font-bold text-[#D8F15B]">
-                  <span className="w-2 h-2 rounded-full bg-[#D8F15B] animate-pulse" />
-                  INTEROPERABLE PAYMENT IDENTITY &amp; SETTLEMENT
-                </div>
-
                 {/* Editorial Serif Heading */}
                 <h1 className="text-5xl sm:text-6xl lg:text-[64px] font-normal tracking-tight text-[#111B32] font-serif leading-[1.08]">
                   One identity. <br />

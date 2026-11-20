@@ -25,12 +25,14 @@ describe("Authentication & Session Security Boundaries", () => {
   });
 
   it("creates a brand-new user with distinct 10-digit account number", () => {
-    const uniqueEmail = `test_${Date.now()}@example.com`;
+    const uniqueSuffix = Date.now().toString(36);
+    const uniqueEmail = `test_${uniqueSuffix}@example.com`;
+    const uniqueHandle = `marcus_${uniqueSuffix}`;
     const newUser = createUser({
       name: "Marcus Aurelius",
       email: uniqueEmail,
       role: "business",
-      handle: "marcus_a",
+      handle: uniqueHandle,
     });
 
     expect(newUser.id).toBeDefined();
@@ -38,10 +40,10 @@ describe("Authentication & Session Security Boundaries", () => {
     expect(newUser.email).toBe(uniqueEmail);
     expect(newUser.role).toBe("business");
     expect(newUser.veyloAccountNumber).toMatch(/^\d{3}\s\d{3}\s\d{4}$/);
-    expect(newUser.openPaymentsAddress).toBe("https://ilp.interledger-test.dev/marcus_a");
+    expect(newUser.openPaymentsAddress).toBe(`https://ilp.interledger-test.dev/${uniqueHandle}`);
 
     // Can be resolved by handle
-    const resolved = getUserByVeyloNumberOrHandle("@marcus_a");
+    const resolved = getUserByVeyloNumberOrHandle(`@${uniqueHandle}`);
     expect(resolved?.id).toBe(newUser.id);
   });
 
