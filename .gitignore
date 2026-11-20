@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+reelroom-website/node_modules/
 /.pnp
 .pnp.js
 .yarn/cache
