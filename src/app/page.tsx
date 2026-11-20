@@ -78,8 +78,12 @@ export default function MarketingHomePage() {
               <div className="lg:col-span-7 space-y-6 text-left">
                 {/* Editorial Serif Heading */}
                 <h1 className="text-5xl sm:text-6xl lg:text-[64px] font-normal tracking-tight text-[#111B32] font-serif leading-[1.08]">
-                  One identity. <br />
-                  <span className="italic text-[#3D5BFF]">A more connected way to move money.</span>
+                  <span className="[text-stroke:0.85px_#111B32] [-webkit-text-stroke:0.85px_#111B32]">
+                    One identity.
+                  </span> <br />
+                  <span className="italic text-[#3D5BFF] [text-stroke:0.4px_#3D5BFF] [-webkit-text-stroke:0.4px_#3D5BFF]">
+                    A more connected way to move money.
+                  </span>
                 </h1>
 
                 {/* Subtitle */}
