@@ -46,11 +46,6 @@ export const MarketingNavbar: React.FC = () => {
 
         {/* Right CTA Area (Figma 51:15) */}
         <div className="hidden sm:flex items-center gap-4">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[12px] bg-[rgba(16,185,129,0.15)] text-[11px] font-bold text-[#10B981]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-            <span>Open Payments Active</span>
-          </div>
-
           <Link
             href="/auth/login"
             className="text-[14px] font-semibold text-[#111B32] hover:text-[#3D5BFF] transition-colors px-2"
