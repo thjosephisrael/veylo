@@ -218,9 +218,6 @@ export default function InternationalTransferPage() {
               </p>
             </div>
           </div>
-          <Badge variant="lime" size="sm" className="shrink-0 self-start sm:self-center">
-            Test Environment • Play Money
-          </Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -708,9 +705,6 @@ export default function InternationalTransferPage() {
                 >
                   {isQuoteExpired ? "Quote Expired — Please Refresh" : "Approve International Transfer"}
                 </Button>
-                <p className="text-[11px] text-center text-slate-400 font-mono">
-                  Test environment execution • Play money
-                </p>
               </div>
             </div>
           ) : (

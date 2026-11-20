@@ -533,9 +533,6 @@ export default function SendMoneyPage() {
                 >
                   Approve Payment
                 </Button>
-                <p className="text-[11px] text-center text-slate-400 font-mono">
-                  Test environment authorization • Play money
-                </p>
               </div>
             </div>
           ) : (

@@ -104,11 +104,6 @@ export default function LoginPage() {
         <VeyloLogo variant="light" size="sm" href="/" />
 
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3 py-1 text-[11px] font-mono text-slate-600 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Test Environment • Play Money</span>
-          </div>
-
           <Link
             href="/"
             className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-midnight-950 transition-colors"
