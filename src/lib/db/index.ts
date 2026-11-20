@@ -122,13 +122,15 @@ export function getUserByVeyloNumberOrHandle(query: string): UserProfile | null 
       const uName = u.name.toLowerCase();
       const uEmail = u.email.toLowerCase();
       const uAddress = u.openPaymentsAddress.toLowerCase();
+      const uBankAcct = u.connectedBank?.accountNumber?.replace(/\s+/g, "").toLowerCase();
 
       return (
         uAcctNoSpaces === cleanNoSpaces ||
         uHandleNoAt === cleanNoAt ||
         uName === clean ||
         uEmail === clean ||
-        uAddress === clean
+        uAddress === clean ||
+        (!!uBankAcct && uBankAcct === cleanNoSpaces)
       );
     }) || null
   );

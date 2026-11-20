@@ -52,7 +52,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             leftIcon={<QrCode className="w-3.5 h-3.5 text-[#111B32]" />}
             className="hidden sm:inline-flex"
           >
-            My QR
+            Receive / QR
           </Button>
         )}
 

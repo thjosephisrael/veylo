@@ -36,9 +36,11 @@ interface AccountContextType {
   userSubscriptions: SubscriptionMandate[];
   testnetStatus: InterledgerNetworkStatus;
   sendPayment: (params: SendPaymentParams) => Promise<{ success: boolean; reference: string; error?: string }>;
+  receivePayment: (amountNgn: number, senderName?: string) => Promise<{ success: boolean; error?: string }>;
   revokeMandate: (mandateId: string) => void;
   resetAllDemoData: () => void;
   refreshTransactions: () => Promise<void>;
+  refreshUsers: () => Promise<void>;
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined);
@@ -52,9 +54,36 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
     INTERLEDGER_TESTNET_STATUS
   );
 
+  const refreshUsers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users && Array.isArray(data.users)) {
+          setUsers(data.users);
+        }
+      }
+    } catch {
+      // Fall back
+    }
+  }, []);
+
   // Check health and server session on mount
   useEffect(() => {
     async function init() {
+      // 0. Fetch latest users and live balances from server DB
+      try {
+        const usersRes = await fetch("/api/users");
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          if (usersData.users && Array.isArray(usersData.users)) {
+            setUsers(usersData.users);
+          }
+        }
+      } catch {
+        // Fall back to DEMO_ACCOUNTS
+      }
+
       // 1. Fetch real Open Payments health
       try {
         const healthRes = await fetch("/api/health");
@@ -131,6 +160,9 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch {
         // Continue
       }
+
+      await refreshUsers();
+      await refreshTransactions();
     }
   };
 
@@ -197,6 +229,10 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTransactions((prev) => [data.transaction, ...prev]);
       }
 
+      // Sync updated balances across all accounts in directory
+      refreshUsers();
+      refreshTransactions();
+
       return {
         success: true,
         reference: data.transaction?.reference || reference,
@@ -207,6 +243,37 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
         reference: "",
         error: "Network error connecting to payment gateway.",
       };
+    }
+  };
+
+  /**
+   * Receives an inbound transfer / deposit into the active user's account via Open Payments.
+   */
+  const receivePayment = async (
+    amountNgn: number,
+    senderName: string = "Open Payments Interledger Testnet"
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch("/api/payments/receive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUserId,
+          amount: amountNgn,
+          senderName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || "Failed to receive payment." };
+      }
+
+      await refreshUsers();
+      await refreshTransactions();
+      return { success: true };
+    } catch {
+      return { success: false, error: "Network error receiving payment." };
     }
   };
 
@@ -245,9 +312,11 @@ export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ child
         userSubscriptions,
         testnetStatus,
         sendPayment,
+        receivePayment,
         revokeMandate,
         resetAllDemoData,
         refreshTransactions,
+        refreshUsers,
       }}
     >
       {children}
