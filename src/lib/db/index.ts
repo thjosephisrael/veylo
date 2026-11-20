@@ -139,6 +139,69 @@ export function getAllUsers(): UserProfile[] {
   return db.users;
 }
 
+export function createUser(userData: {
+  name: string;
+  email: string;
+  role?: "consumer" | "business" | "international";
+  handle?: string;
+  currency?: string;
+  location?: string;
+}): UserProfile {
+  const db = readDatabase();
+
+  const cleanEmail = userData.email.trim().toLowerCase();
+  const existing = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+  if (existing) {
+    throw new Error("An account with this email address already exists.");
+  }
+
+  const userId = `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+
+  // Generate distinct 10-digit Veylo Account Number
+  const d1 = Math.floor(100 + Math.random() * 900);
+  const d2 = Math.floor(100 + Math.random() * 900);
+  const d3 = Math.floor(1000 + Math.random() * 9000);
+  const veyloAccountNumber = `${d1} ${d2} ${d3}`;
+
+  const cleanHandle = userData.handle
+    ? userData.handle.startsWith("@")
+      ? userData.handle
+      : `@${userData.handle}`
+    : `@${userData.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}`;
+
+  const role = userData.role || "consumer";
+  const currency = userData.currency || (role === "business" ? "EUR" : "NGN");
+
+  const newUser: UserProfile = {
+    id: userId,
+    name: userData.name.trim(),
+    email: cleanEmail,
+    handle: cleanHandle,
+    role,
+    veyloAccountNumber,
+    isVerified: true,
+    location: userData.location || (role === "business" ? "Berlin, Germany" : "Lagos, Nigeria"),
+    avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
+    openPaymentsAddress: `https://ilp.interledger-test.dev/${cleanHandle.replace("@", "")}`,
+    connectedBank: {
+      bankName: role === "business" ? "Commerzbank AG" : "Guaranty Trust Bank (GTBank)",
+      accountNumber: "••" + Math.floor(1000 + Math.random() * 9000),
+      accountHolder: userData.name.trim(),
+      currency,
+      status: "connected",
+    },
+    totalBalanceNgn: role === "business" ? 0 : 250000,
+    availableBalanceNgn: role === "business" ? 0 : 250000,
+    currency,
+    foreignBalance: role === "business" ? { amount: 1500.0, currency: "EUR" } : undefined,
+    bio: role === "business" ? "Merchant Account" : "Personal Account",
+  };
+
+  db.users.push(newUser);
+  writeDatabase(db);
+  return newUser;
+}
+
 /**
  * Updates a user's balance safely with integer minor units validation
  */

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { NIGERIAN_BANKS } from "@/data/mockData";
+import { useAccount } from "@/context/AccountContext";
 import {
   CheckCircle2,
   ArrowRight,
@@ -21,13 +22,14 @@ import {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { currentUser } = useAccount();
   const [step, setStep] = useState(1);
 
   // Form State
-  const [handle, setHandle] = useState("tomiade");
+  const [handle, setHandle] = useState(currentUser.handle.replace("@", ""));
   const [selectedBank, setSelectedBank] = useState("gtb");
   const [bankAccount, setBankAccount] = useState("0123456789");
-  const [resolvedBankHolder, setResolvedBankHolder] = useState("Oluwatomi Adebayo");
+  const [resolvedBankHolder, setResolvedBankHolder] = useState(currentUser.name);
   const [isVerifying, setIsVerifying] = useState(false);
 
   const handleNextStep = () => {
@@ -81,10 +83,10 @@ export default function OnboardingPage() {
                   Reserved Account Number
                 </span>
                 <p className="text-3xl font-mono font-black tracking-widest text-white">
-                  482 193 7604
+                  {currentUser.veyloAccountNumber}
                 </p>
                 <p className="text-xs text-slate-400">
-                  Assigned deterministically based on your phone and national identifier.
+                  Assigned deterministically based on your registered credentials.
                 </p>
               </div>
 
@@ -93,7 +95,7 @@ export default function OnboardingPage() {
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
                 leftAddon={<span className="font-bold text-slate-400">@</span>}
-                helperText="Public identifier for peer transfers: veylo.me/@tomiade"
+                helperText={`Public identifier for peer transfers: veylo.me/@${handle || "username"}`}
               />
 
               <Button

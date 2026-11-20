@@ -368,7 +368,7 @@ export default function MarketingHomePage() {
 
                 <div className="pt-2">
                   <Link
-                    href="/business"
+                    href="/auth/register?role=merchant"
                     className="inline-flex items-center justify-center font-bold rounded-[12px] px-[22px] py-[14px] text-[14px] bg-[#D8F15B] hover:bg-[#C5DE48] text-[#111B32] transition-all active:scale-[0.98]"
                   >
                     Create Free Merchant Account →
