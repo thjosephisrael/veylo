@@ -65,12 +65,12 @@ export default function BusinessMerchantDashboardPage() {
                 In-Store POS Stand Simulator
               </Button>
               <Button
-                href="/demo/reelroom"
+                href="/security"
                 variant="outline-dark"
                 size="md"
                 rightIcon={<ExternalLink className="w-4 h-4 text-acid-lime" />}
               >
-                Test Consumer Checkout
+                API &amp; Settlement Architecture
               </Button>
             </div>
           </div>

@@ -12,7 +12,7 @@ export const MarketingNavbar: React.FC = () => {
     { label: "Personal", href: "/app" },
     { label: "Business", href: "/business" },
     { label: "How It Works", href: "/#how-it-works" },
-    { label: "Security", href: "/demo/checkout-architecture" },
+    { label: "Security", href: "/security" },
     { label: "About", href: "/#about" },
   ];
 

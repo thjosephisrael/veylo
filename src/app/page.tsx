@@ -100,10 +100,10 @@ export default function MarketingHomePage() {
                     Claim Your Veylo Account Number →
                   </Link>
                   <Link
-                    href="/demo/reelroom"
+                    href="/security"
                     className="inline-flex items-center justify-center font-semibold rounded-[12px] px-[20px] py-[14px] text-[14px] bg-white border border-[#CBD5E1] text-[#111B32] hover:bg-slate-50 transition-all active:scale-[0.98]"
                   >
-                    Explore Checkout Demo
+                    Security &amp; Architecture →
                   </Link>
                 </div>
 
@@ -431,90 +431,6 @@ export default function MarketingHomePage() {
                   <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[rgba(16,185,129,0.2)] text-[11px] font-bold text-[#10B981]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
                     Direct Settlement to Commerzbank IBAN DE89•••4012 (340ms)
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================
-            REELROOM SHOWCASE SECTION (Figma 51:151)
-           ======================================================== */}
-        <section className="py-20 md:py-24 bg-[#0C0D12] text-white border-b border-slate-900">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-              {/* Left Column */}
-              <div className="lg:col-span-7 space-y-5 text-left">
-                <span className="inline-block bg-[#E50914] px-2 py-1 rounded-[4px] text-[9px] font-bold text-white uppercase tracking-wider">
-                  FEATURED 3RD-PARTY CHECKOUT DEMO
-                </span>
-
-                <h2 className="text-3xl sm:text-[42px] font-serif text-white leading-tight">
-                  Subscribe to ReelRoom Cinema <br />
-                  <span className="italic text-[#3D5BFF]">With Zero Card Details</span>
-                </h2>
-
-                <p className="text-[14px] text-[#94A3B8] max-w-xl leading-relaxed">
-                  See how real-world subscription services integrate Veylo. Customers authorize a recurring Open Payments mandate for €12.99/mo on Cinema Pro 4K without storing a credit card on file. Users retain 100% control to pause or revoke mandates directly in their Veylo app.
-                </p>
-
-                <div className="space-y-2 text-[12px] font-semibold text-[#D8F15B]">
-                  <p>✓ Out-of-band push authorization eliminates card theft and credential scraping</p>
-                  <p>✓ Billed autonomously on 1st of every month via atomic Interledger packets</p>
-                  <p>✓ 1-click mandate cancellation stops zombie subscription charges instantly</p>
-                </div>
-
-                <div className="pt-2">
-                  <Link
-                    href="/demo/reelroom"
-                    className="inline-flex items-center justify-center font-bold rounded-[10px] px-[20px] py-[12px] text-[13px] bg-[#3D5BFF] hover:bg-[#2E49E6] text-white transition-all active:scale-[0.98]"
-                  >
-                    Try Interactive ReelRoom Checkout Demo →
-                  </Link>
-                </div>
-              </div>
-
-              {/* Right Column: Mandate Preview Card (Figma 51:162) */}
-              <div className="lg:col-span-5 flex justify-center">
-                <div className="w-full max-w-md rounded-[20px] bg-[#161822] border-[1.5px] border-[#D8F15B] p-6 space-y-4 shadow-2xl text-left">
-                  <div className="flex items-center justify-between pb-1">
-                    <span className="text-[11px] font-mono font-bold text-[#D8F15B]">
-                      REELROOM CINEMA PRO • ORDER #RR-88491
-                    </span>
-                    <span className="bg-[#3D5BFF] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-[4px]">
-                      MANDATE ACTIVE
-                    </span>
-                  </div>
-
-                  <div className="rounded-[12px] bg-[#0E1018] p-4 space-y-2.5 text-xs font-mono">
-                    <div className="flex justify-between items-center text-white">
-                      <span className="font-bold text-[14px]">Cinema Pro 4K HDR (Monthly)</span>
-                      <span className="font-black text-[18px]">€12.99 / mo</span>
-                    </div>
-                    <div className="flex justify-between items-center text-[#94A3B8]">
-                      <span>Payer Veylo Account</span>
-                      <span className="font-bold text-[#D8F15B]">482 193 7604 (@tomiade)</span>
-                    </div>
-                    <div className="flex justify-between items-center text-[#94A3B8]">
-                      <span>Protocol Mandate ID</span>
-                      <span className="text-[#EEF2FF]">mandate_op_9942a7bc</span>
-                    </div>
-                  </div>
-
-                  {/* Push Handshake Pill (Figma 51:177) */}
-                  <div className="rounded-[12px] bg-[#111B32] border border-[#334155] p-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-[#D8F15B] text-[#111B32] flex items-center justify-center text-lg shrink-0">
-                      📲
-                    </div>
-                    <div className="text-left space-y-0.5">
-                      <p className="text-[12px] font-bold text-[#D8F15B]">
-                        Push Handshake Sent to iPhone 15 Pro
-                      </p>
-                      <p className="text-[11px] text-[#CBD5E1]">
-                        Tomi approved €12.99/mo mandate via Face ID in Veylo App
-                      </p>
-                    </div>
                   </div>
                 </div>
               </div>

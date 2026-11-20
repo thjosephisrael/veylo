@@ -54,8 +54,8 @@ export const MarketingFooter: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link href="/demo/reelroom" className="hover:text-white transition-colors">
-                  ReelRoom Demo
+                <Link href="/security" className="hover:text-white transition-colors">
+                  Security &amp; Architecture
                 </Link>
               </li>
               <li>
@@ -73,12 +73,12 @@ export const MarketingFooter: React.FC = () => {
             </h4>
             <ul className="space-y-2.5 text-[12px] text-[#CBD5E1]">
               <li>
-                <Link href="/demo/checkout-architecture" className="hover:text-white transition-colors">
+                <Link href="/security" className="hover:text-white transition-colors">
                   Interledger ILP v4
                 </Link>
               </li>
               <li>
-                <Link href="/demo/checkout-architecture" className="hover:text-white transition-colors">
+                <Link href="/security" className="hover:text-white transition-colors">
                   Open Payments API
                 </Link>
               </li>
@@ -107,7 +107,7 @@ export const MarketingFooter: React.FC = () => {
             </h4>
             <ul className="space-y-2.5 text-[12px] text-[#CBD5E1]">
               <li>
-                <Link href="/demo/checkout-architecture" className="hover:text-white transition-colors">
+                <Link href="/security" className="hover:text-white transition-colors">
                   Documentation
                 </Link>
               </li>

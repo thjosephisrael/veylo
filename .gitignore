@@ -40,3 +40,8 @@ next-env.d.ts
 
 # server database
 /.data/
+
+# build & dist
+dist/
+reelroom-website/dist/
+slide*.png

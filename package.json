@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:reelroom": "vite reelroom-website --port 3001 --host",
     "build": "next build",
+    "build:reelroom": "vite build reelroom-website",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

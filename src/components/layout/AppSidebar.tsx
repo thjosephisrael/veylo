@@ -11,7 +11,6 @@ import {
   Repeat,
   PieChart,
   Clock,
-  Film,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -43,10 +42,9 @@ export const AppSidebar: React.FC<{ isOpen?: boolean; onClose?: () => void }> = 
     { label: "Activity & History", href: "/app/activity", icon: Clock },
   ];
 
-  const demoNavItems = [
-    { label: "Reelroom Checkout", href: "/demo/reelroom", icon: Film },
-    { label: "Checkout Architecture", href: "/demo/checkout-architecture", icon: Shield },
-    { label: "Veylo Business Portal", href: "/business", icon: Building2 },
+  const platformNavItems = [
+    { label: "Merchant Portal", href: "/business", icon: Building2 },
+    { label: "Security & Protocol", href: "/security", icon: Shield },
   ];
 
   const sidebarContent = (
@@ -127,12 +125,12 @@ export const AppSidebar: React.FC<{ isOpen?: boolean; onClose?: () => void }> = 
           })}
         </div>
 
-        {/* Demo Section */}
+        {/* Platform Section */}
         <div className="space-y-1 pt-2 border-t border-midnight-900">
           <div className="px-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-            Interledger Demos
+            Platform &amp; Infrastructure
           </div>
-          {demoNavItems.map((item) => {
+          {platformNavItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
             return (
