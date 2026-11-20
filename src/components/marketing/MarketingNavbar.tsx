@@ -20,15 +20,8 @@ export const MarketingNavbar: React.FC = () => {
     <header className="sticky top-0 z-40 w-full border-b border-[#E2E8F0] bg-white">
       <div className="mx-auto flex h-[80px] max-w-[1440px] items-center justify-between px-6 sm:px-12">
         {/* Brand (Figma 51:4) */}
-        <div className="flex items-center gap-2.5">
-          <Link href="/" className="flex items-center gap-2.5 focus:outline-none">
-            <div className="w-8 h-8 rounded-[8px] bg-[#D8F15B] flex items-center justify-center font-extrabold text-[20px] text-[#111B32] font-sans">
-              V
-            </div>
-            <span className="font-extrabold text-[20px] tracking-wider text-[#111B32] font-sans">
-              VEYLO
-            </span>
-          </Link>
+        <div className="flex items-center">
+          <VeyloLogo variant="light" size="md" href="/" />
         </div>
 
         {/* Center Desktop Links (Figma 51:8) */}

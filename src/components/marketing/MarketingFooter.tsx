@@ -9,13 +9,8 @@ export const MarketingFooter: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand & Manifesto Column (Figma 51:211) */}
           <div className="lg:col-span-2 space-y-4 text-left">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-[6px] bg-[#D8F15B] flex items-center justify-center font-extrabold text-[18px] text-[#111B32] font-sans">
-                V
-              </div>
-              <span className="font-extrabold text-[20px] tracking-wider text-white font-sans">
-                VEYLO
-              </span>
+            <div className="flex items-center">
+              <VeyloLogo variant="dark" size="md" href="/" />
             </div>
             <p className="text-[13px] text-[#CBD5E1] max-w-sm leading-relaxed">
               Move money. Keep control. The interoperable payment identity network.
